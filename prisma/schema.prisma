@@ -1,0 +1,149 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Employee model
+model Employee {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  department    String
+  role          String
+  isAnonymous   Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  checkIns      CheckIn[]
+  wellnessData  WellnessData?
+  contactRequests ContactRequest[]
+
+  @@index([department])
+  @@index([email])
+}
+
+// Weekly check-in responses
+model CheckIn {
+  id              String    @id @default(cuid())
+  employeeId      String
+  employee        Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  
+  // Survey responses (1-5 scale)
+  energyLevel     Int       @db.SmallInt
+  workloadLevel   Int       @db.SmallInt
+  motivation      Int       @db.SmallInt
+  teamSupport     Int       @db.SmallInt
+  stressLevel     Int       @db.SmallInt
+  
+  // Optional fields
+  note            String?   @db.VarChar(120)
+  moodEmoji       String?
+  requestsHRContact Boolean  @default(false)
+  
+  // Metadata
+  createdAt       DateTime  @default(now())
+  week            Int       // ISO week number
+  year            Int       // Year for grouping
+  
+  // Burnout assessment
+  burnoutScore    Float     @default(0)
+  riskLevel       String    @default("healthy") // healthy, watch, high_risk, critical
+
+  @@index([employeeId])
+  @@index([createdAt])
+  @@index([year, week])
+  @@unique([employeeId, year, week])
+}
+
+// Aggregated wellness data per employee
+model WellnessData {
+  id              String    @id @default(cuid())
+  employeeId      String    @unique
+  employee        Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  
+  // Trend data
+  avgEnergyLevel  Float
+  avgWorkloadLevel Float
+  avgMotivation   Float
+  avgTeamSupport  Float
+  avgStressLevel  Float
+  
+  // Risk indicators
+  currentBurnoutScore Float
+  trendDirection  String    // "improving", "stable", "declining"
+  consecutiveHighStress Int @default(0)
+  motivationDropWeeks Int @default(0)
+  
+  // Last check-in
+  lastCheckInDate DateTime?
+  consecutiveMissedWeeks Int @default(0)
+  
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([currentBurnoutScore])
+}
+
+// Contact requests from employees
+model ContactRequest {
+  id          String    @id @default(cuid())
+  employeeId  String
+  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  
+  reason      String?
+  urgency     String    @default("normal") // normal, urgent
+  resolved    Boolean   @default(false)
+  
+  createdAt   DateTime  @default(now())
+  resolvedAt  DateTime?
+  
+  @@index([resolved])
+  @@index([urgency])
+}
+
+// Department aggregates
+model DepartmentMetrics {
+  id              String    @id @default(cuid())
+  department      String    @unique
+  
+  avgBurnoutScore Float
+  healthyCount    Int
+  watchCount      Int
+  highRiskCount   Int
+  criticalCount   Int
+  
+  participationRate Float
+  
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([department])
+}
+
+// Wellness nudges/notifications
+model WellnessNudge {
+  id        String    @id @default(cuid())
+  message   String
+  emoji     String
+  category  String    // walk, screen-break, hydration, stretching, breathing
+  active    Boolean   @default(true)
+  
+  createdAt DateTime  @default(now())
+}
+
+// Audit log for compliance
+model AuditLog {
+  id        String    @id @default(cuid())
+  action    String
+  details   String?
+  userId    String?
+  timestamp DateTime  @default(now())
+  
+  @@index([timestamp])
+}
